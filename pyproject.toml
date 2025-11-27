@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hf-chatbot-demo"
+version = "0.1.0"
+description = "RAG-powered customer support chatbot for Hugging Face Spaces"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+
+dependencies = [
+    "gradio>=4.0.0",
+    "langchain>=0.1.0",
+    "langchain-community>=0.0.10",
+    "sentence-transformers>=2.2.0",
+    "faiss-cpu>=1.7.0",
+    "huggingface-hub>=0.17.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pdm>=2.0.0",
+    "build>=1.0.0",
+]
+
+[tool.pdm]
+includes = ["src/"]
+
+[tool.pdm.scripts]
+build = "python scripts/build.py"
+upload = "python scripts/upload.py"
+dev = "python -m gradio src/chatbot/app.py"
