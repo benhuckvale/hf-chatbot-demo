@@ -1,6 +1,0 @@
-gradio
-langchain
-langchain-community
-sentence-transformers
-faiss-cpu
-huggingface-hub
