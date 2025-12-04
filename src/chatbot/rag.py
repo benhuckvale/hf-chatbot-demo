@@ -1,8 +1,8 @@
 """RAG (Retrieval-Augmented Generation) functionality for the chatbot."""
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 
 def load_and_chunk_faq(file_path: str) -> list[str]:
