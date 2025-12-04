@@ -13,8 +13,9 @@ chunks = load_and_chunk_faq("faq.md")
 print(f"Created {len(chunks)} chunks from FAQ")
 vector_store = build_vector_store(chunks)
 
-# Initialize the LLM client (using Mistral 7B via Inference API)
-client = InferenceClient("mistralai/Mistral-7B-Instruct-v0.3")
+# Initialize the LLM client (using Qwen via Inference API)
+# Using Qwen2.5-Coder-32B-Instruct which is available on HF Inference API
+client = InferenceClient("Qwen/Qwen2.5-Coder-32B-Instruct")
 
 
 def respond(message: str, history: list, request: gr.Request) -> str:
@@ -47,8 +48,10 @@ def respond(message: str, history: list, request: gr.Request) -> str:
         # Build conversation history for context
         conversation_context = ""
         if history:
-            for human, assistant in history[-3:]:  # Last 3 exchanges
-                conversation_context += f"User: {human}\nAssistant: {assistant}\n\n"
+            for exchange in history[-3:]:  # Last 3 exchanges
+                if isinstance(exchange, (list, tuple)) and len(exchange) >= 2:
+                    human, assistant = exchange[0], exchange[1]
+                    conversation_context += f"User: {human}\nAssistant: {assistant}\n\n"
 
         # Build the system prompt with FAQ context
         system_prompt = f"""You are a helpful customer support assistant for an online store.
@@ -67,24 +70,25 @@ FAQ Content:
 Previous conversation:
 {conversation_context}"""
 
-        # Format prompt for Mistral model
-        prompt = f"<s>[INST] {system_prompt}\n\nCurrent question: {message} [/INST]"
+        # Build messages for chat completion
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message}
+        ]
 
-        # Generate response using Inference API
+        # Generate response using chat completion API
         response = ""
-        for token in client.text_generation(
-            prompt,
-            max_new_tokens=300,
+        for message_chunk in client.chat_completion(
+            messages=messages,
+            max_tokens=300,
             temperature=0.7,
             stream=True,
-            details=True
         ):
-            if hasattr(token, 'token'):
-                response += token.token.text
-                yield response
-            else:
-                response += str(token)
-                yield response
+            if hasattr(message_chunk, 'choices') and len(message_chunk.choices) > 0:
+                delta = message_chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    response += delta.content
+                    yield response
 
     except Exception as e:
         yield f"Sorry, I encountered an error. Please try again. (Error: {str(e)})"
@@ -100,12 +104,11 @@ demo = gr.ChatInterface(
         "What's your return policy?",
         "Do you ship internationally?",
         "Are your products eco-friendly?"
-    ],
-    theme=gr.themes.Soft(),
-    retry_btn=None,
-    undo_btn=None,
-    clear_btn="Clear Chat"
+    ]
 )
+
+# Apply theme to the demo
+demo.theme = gr.themes.Soft()
 
 
 if __name__ == "__main__":
