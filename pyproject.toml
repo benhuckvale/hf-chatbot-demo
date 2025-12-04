@@ -1,22 +1,27 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
 [project]
 name = "hf-chatbot-demo"
 version = "0.1.0"
 description = "RAG-powered customer support chatbot for Hugging Face Spaces"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11,<3.15"
 license = {text = "MIT"}
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
 
+# Core dependencies
+# Note: torch is handled by install script due to PDM limitations with PyTorch's custom index
 dependencies = [
+    "numpy<2.0",  # Torch 2.2.x requires NumPy 1.x
     "gradio>=4.0.0",
     "langchain>=0.1.0",
     "langchain-community>=0.0.10",
+    "langchain-text-splitters>=0.0.1",
+    "langchain-huggingface>=0.0.1",
     "sentence-transformers>=2.2.0",
     "faiss-cpu>=1.7.0",
     "huggingface-hub>=0.17.0",
@@ -24,14 +29,27 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pdm>=2.0.0",
     "build>=1.0.0",
 ]
 
 [tool.pdm]
 includes = ["src/"]
 
+[tool.pdm.resolution]
+# Exclude torch from PDM's dependency resolution - handled by install script
+excludes = ["torch"]
+
+[tool.pdm.build]
+includes = ["src/chatbot"]
+
 [tool.pdm.scripts]
+# Install all dependencies (automatically handles PyTorch)
+install = {composite = ["pdm sync --no-self", "install-torch"]}
+# Install PyTorch from the official index
+install-torch = "python scripts/install_torch.py"
+# Build the distribution artifact
 build = "python scripts/build.py"
+# Upload to Hugging Face Spaces
 upload = "python scripts/upload.py"
-dev = "python -m gradio src/chatbot/app.py"
+# Run dev server
+dev = {call = "chatbot.app:demo.launch", help = "Run dev server"}

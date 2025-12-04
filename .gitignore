@@ -16,6 +16,7 @@ __pycache__/
 .venv/
 env/
 venv/
+requirements.txt  # Generated in dist/ for HF deployment, not in root
 
 # IDE
 .vscode/
