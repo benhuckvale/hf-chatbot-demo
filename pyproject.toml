@@ -28,9 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "build>=1.0.0",
-]
+dev = []
 
 [tool.pdm]
 includes = ["src/"]
