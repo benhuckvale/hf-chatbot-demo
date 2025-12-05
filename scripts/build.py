@@ -1,6 +1,5 @@
 """Build script to create distribution artifact for Hugging Face Spaces."""
 
-import subprocess
 import shutil
 import sys
 from pathlib import Path
@@ -20,90 +19,48 @@ def main():
         print(f"\n🗑️  Cleaning previous dist directory...")
         shutil.rmtree(dist_dir)
 
-    # Build wheel
-    print(f"\n📦 Building wheel...")
-    result = subprocess.run(
-        [sys.executable, "-m", "build", "--wheel"],
-        cwd=repo_root,
-        capture_output=True,
-        text=True
-    )
+    # Create dist directory
+    print(f"\n📂 Creating dist directory...")
+    dist_dir.mkdir()
+    print(f"✅ Created dist/")
 
-    if result.returncode != 0:
-        print(f"❌ Build failed:")
-        print(result.stderr)
+    # Copy source code
+    print(f"\n📦 Copying source code...")
+    src_dir = repo_root / "src" / "chatbot"
+    dest_chatbot = dist_dir / "chatbot"
+
+    if not src_dir.exists():
+        print(f"❌ Source directory not found: {src_dir}")
         return False
 
-    print(f"✅ Wheel built successfully")
+    shutil.copytree(src_dir, dest_chatbot)
+    print(f"✅ Copied chatbot/ package")
 
-    # Find the wheel file
-    wheel_dir = repo_root / "dist"
-    wheel_files = list(wheel_dir.glob("*.whl"))
-
-    if not wheel_files:
-        print(f"❌ No wheel file found in {wheel_dir}")
-        return False
-
-    wheel_file = wheel_files[0]
-    print(f"   Found: {wheel_file.name}")
-
-    # Create clean dist directory for HF
-    print(f"\n📂 Creating clean dist directory...")
-    hf_dist = repo_root / "dist_hf"
-    if hf_dist.exists():
-        shutil.rmtree(hf_dist)
-    hf_dist.mkdir()
-
-    # Install wheel into dist_hf
-    print(f"📥 Installing wheel to dist_hf...")
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", str(wheel_file), "--target", str(hf_dist)],
-        capture_output=True,
-        text=True
-    )
-
-    if result.returncode != 0:
-        print(f"❌ Installation failed:")
-        print(result.stderr)
-        return False
-
-    print(f"✅ Wheel installed to dist_hf/")
-
-    # Export requirements
-    print(f"\n📋 Exporting requirements...")
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "freeze"],
-        capture_output=True,
-        text=True
-    )
-
-    # Filter to only project dependencies (from pyproject.toml)
+    # Create requirements.txt
+    print(f"\n📋 Creating requirements.txt...")
     requirements = [
+        "torch>=2.0.0",  # HF Spaces will install from PyPI
+        "numpy<2.0",     # Compatibility with torch 2.2.x
         "gradio>=4.0.0",
         "langchain>=0.1.0",
         "langchain-community>=0.0.10",
+        "langchain-text-splitters>=0.0.1",
+        "langchain-huggingface>=0.0.1",
         "sentence-transformers>=2.2.0",
         "faiss-cpu>=1.7.0",
         "huggingface-hub>=0.17.0",
     ]
 
-    requirements_file = hf_dist / "requirements.txt"
+    requirements_file = dist_dir / "requirements.txt"
     with open(requirements_file, "w") as f:
         f.write("\n".join(requirements) + "\n")
-
-    print(f"✅ Requirements written to requirements.txt")
+    print(f"✅ requirements.txt")
 
     # Create entry point app.py
-    print(f"\n🚀 Creating entry point app.py...")
-    app_py = hf_dist / "app.py"
+    print(f"\n🚀 Creating app.py entry point...")
+    app_py = dist_dir / "app.py"
     app_py.write_text(
         """\"\"\"Entry point for Hugging Face Spaces.\"\"\"
-
-import sys
-from pathlib import Path
-
-# Add the current directory to Python path so we can import the installed package
-sys.path.insert(0, str(Path(__file__).parent))
 
 from chatbot.app import demo
 
@@ -111,23 +68,26 @@ if __name__ == "__main__":
     demo.launch()
 """
     )
-    print(f"✅ Entry point created")
+    print(f"✅ app.py")
 
     # Copy supporting files
-    print(f"\n📄 Copying supporting files...")
-    for filename in ["faq.md", "README.md"]:
-        src = repo_root / filename
-        if src.exists():
-            dst = hf_dist / filename
-            shutil.copy(src, dst)
-            print(f"   ✅ {filename}")
-        else:
-            print(f"   ⚠️  {filename} not found")
+    print(f"\n📄 Copying data files...")
 
-    # Move dist_hf to dist
-    if dist_dir.exists():
-        shutil.rmtree(dist_dir)
-    shutil.move(str(hf_dist), str(dist_dir))
+    # Copy faq.md
+    faq_src = repo_root / "faq.md"
+    if faq_src.exists():
+        shutil.copy(faq_src, dist_dir / "faq.md")
+        print(f"   ✅ faq.md")
+    else:
+        print(f"   ⚠️  faq.md not found")
+
+    # Copy README_SPACE.md as README.md for HF Space
+    readme_src = repo_root / "README_SPACE.md"
+    if readme_src.exists():
+        shutil.copy(readme_src, dist_dir / "README.md")
+        print(f"   ✅ README.md (from README_SPACE.md)")
+    else:
+        print(f"   ⚠️  README_SPACE.md not found")
 
     print(f"\n" + "=" * 60)
     print(f"✅ Distribution ready in: dist/")

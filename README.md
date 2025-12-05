@@ -1,210 +1,164 @@
-# Hugging Face Store Chatbot
+# HF Chatbot Demo
 
-A RAG-powered customer support chatbot for ecommerce sites, hosted on Hugging Face Spaces.
+A RAG-powered customer support chatbot built with Gradio, designed for deployment on Hugging Face Spaces.
 
 ## Features
 
-- ✅ RAG (Retrieval-Augmented Generation) using your FAQ content
-- ✅ Semantic search with FAISS vector store
-- ✅ Rate limiting (15 requests per minute per IP)
-- ✅ Conversation memory (remembers last 3 exchanges)
-- ✅ Streaming responses for better UX
-- ✅ Uses Mistral 7B via Hugging Face Inference API
-- ✅ Free hosting on Hugging Face Spaces
+- 🔍 **RAG with FAISS**: Semantic search over FAQ content using HuggingFace embeddings
+- 🤖 **Qwen2.5-Coder-32B**: Powered by Qwen via HF Inference API
+- 💬 **Conversation Memory**: Remembers last 3 exchanges for context
+- ⏱️ **Rate Limiting**: 15 requests/min per IP to prevent abuse
+- ⚡ **Streaming Responses**: Real-time response generation
+- 🎨 **Gradio 6.x**: Modern chat interface
 
-## Files Included
+## Prerequisites
 
-- `app.py` - Main Gradio application with RAG implementation
-- `requirements.txt` - Python dependencies
-- `faq.md` - Sample FAQ content (replace with your own!)
-- `README.md` - This file
+- Python 3.11-3.14
+- [PDM](https://pdm-project.org/) for dependency management
 
-## Setup Instructions
+## Installation
 
-### Option 1: Web Upload (Easiest)
+### 1. Install Dependencies
 
-1. Create a new Space at https://huggingface.co/new-space
-   - Name: Choose a name for your chatbot
-   - SDK: Select "Gradio"
-   - Hardware: Select "CPU basic - Free"
-   - Visibility: Public (required for free tier)
+```bash
+pdm install
+```
 
-2. Click "Files" → "Add file" → "Upload files"
-   - Upload all files from this zip
+This runs a composite command that:
+1. Installs all dependencies from `pyproject.toml` (via `pdm sync --no-self`)
+2. Installs PyTorch from the official CPU index (via custom `install-torch` script)
 
-3. Wait for the Space to build (watch the "Logs" tab)
+**Why the custom PyTorch setup?** PDM can't handle PyTorch's platform-specific wheels from their custom index. See [PYTORCH_SETUP.md](PYTORCH_SETUP.md) for details.
 
-4. Once it says "Running", click the Space URL to test your chatbot!
+### 2. Run Development Server
 
-### Option 2: Git Upload (For Developers)
+```bash
+pdm run dev
+```
 
-1. Create a new Space on Hugging Face
+This launches the Gradio app at http://localhost:7860
 
-2. Clone the Space repository:
+## Development Workflow
+
+### Project Structure
+
+```
+hf-chatbot-demo/
+├── src/chatbot/          # Main application code
+│   ├── app.py           # Gradio interface + main logic
+│   ├── rag.py           # RAG implementation (embeddings, vector store)
+│   └── rate_limiter.py  # IP-based rate limiting
+├── scripts/
+│   ├── install_torch.py # Custom PyTorch installer
+│   ├── build.py         # Build dist/ for HF Spaces
+│   └── upload.py        # Upload to HF Spaces
+├── faq.md               # FAQ content (customize this!)
+├── pyproject.toml       # PDM dependencies and scripts
+└── README_SPACE.md      # README for HF Space deployment
+```
+
+### Available Commands
+
+```bash
+pdm install         # Install all dependencies (including PyTorch)
+pdm run dev         # Run development server
+pdm run build       # Build distribution for HF Spaces
+pdm run upload USER SPACE  # Upload to HF Spaces
+```
+
+### Customizing the FAQ
+
+Edit `faq.md` with your own content. The RAG system will:
+1. Chunk the content (500 chars with 50 char overlap)
+2. Generate embeddings using `sentence-transformers/all-MiniLM-L6-v2`
+3. Build a FAISS vector index for similarity search
+
+### Modifying the LLM
+
+In `src/chatbot/app.py`, change the model:
+
+```python
+client = InferenceClient("Qwen/Qwen2.5-Coder-32B-Instruct")
+```
+
+Other options on HF Inference API:
+- `meta-llama/Llama-3.1-8B-Instruct`
+- `mistralai/Mistral-7B-Instruct-v0.3`
+- `HuggingFaceH4/zephyr-7b-beta`
+
+## Building & Deployment
+
+### Build Distribution
+
+```bash
+pdm run build
+```
+
+This creates a `dist/` directory containing:
+- `chatbot/` - Source code
+- `app.py` - Entry point
+- `requirements.txt` - Dependencies for HF Spaces
+- `faq.md` - FAQ content
+- `README.md` - Space documentation (from `README_SPACE.md`)
+
+**Note**: The build only copies source code, not compiled dependencies. HF Spaces will install dependencies from `requirements.txt`.
+
+### Deploy to HuggingFace Spaces
+
+1. Create a Space at https://huggingface.co/new-space
+   - SDK: Gradio
+   - Hardware: CPU basic (free)
+
+2. Login to HuggingFace:
    ```bash
-   git clone https://huggingface.co/spaces/YOUR-USERNAME/YOUR-SPACE-NAME
-   cd YOUR-SPACE-NAME
+   huggingface-cli login
+   ```
+   Use a **write** token.
+
+3. Upload:
+   ```bash
+   pdm run upload USERNAME SPACE-NAME
    ```
 
-3. Copy all files from this zip into the cloned directory
-
-4. Commit and push:
+   Example:
    ```bash
-   git add .
-   git commit -m "Initial chatbot setup"
-   git push
+   pdm run upload benhuckvale chatbot-demo
    ```
 
-5. Hugging Face will automatically build and deploy your Space
+The Space will build automatically. Watch the "Logs" tab for progress.
 
-### Option 3: Hugging Face Hub API (Programmatic)
+## PyTorch Installation
 
-See the instructions in the "Using the API" section below.
+This project uses a custom PyTorch installation approach because PDM can't handle PyTorch's platform-specific wheels. See [PYTORCH_SETUP.md](PYTORCH_SETUP.md) for:
 
-## Customizing Your FAQ
+- Why the custom approach is needed
+- How it works (`resolution.excludes` + custom install script)
+- How to customize for CUDA/ROCm
 
-**Important:** Replace the sample `faq.md` with your actual FAQ content!
+## Security
 
-Tips for good FAQ content:
-- Use clear headings (## for sections)
-- Write natural Q&A pairs
-- Include common customer questions
-- Keep answers concise but complete
-- Update regularly based on actual customer questions
+Git secrets scanning is configured to prevent committing tokens:
 
-## Embedding in WordPress
-
-### Simple Iframe Method
-
-Add this HTML to your WordPress page:
-
-```html
-<iframe 
-    src="https://YOUR-USERNAME-YOUR-SPACE.hf.space" 
-    width="100%" 
-    height="600px" 
-    style="border: none; border-radius: 10px;"
-    title="Customer Support Chat">
-</iframe>
+```bash
+git secrets --scan          # Scan all files
+git secrets --scan-history  # Scan commit history
 ```
 
-### Floating Chat Button (Advanced)
+Patterns are configured for AWS, HuggingFace, OpenAI, GitHub, GitLab, and Slack tokens.
 
-Create a floating chat button that opens the chatbot:
+## Dependencies
 
-```html
-<style>
-  .chat-button {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: #007bff;
-    color: white;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    z-index: 1000;
-  }
-  .chat-popup {
-    position: fixed;
-    bottom: 90px;
-    right: 20px;
-    width: 400px;
-    height: 600px;
-    display: none;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    z-index: 1000;
-  }
-  .chat-popup.active {
-    display: block;
-  }
-</style>
+### Core
+- `gradio>=4.0.0` - Web UI
+- `langchain>=0.1.0` - RAG framework
+- `sentence-transformers>=2.2.0` - Embeddings (requires PyTorch)
+- `faiss-cpu>=1.7.0` - Vector similarity search
+- `huggingface-hub>=0.17.0` - HF Inference API
 
-<button class="chat-button" onclick="toggleChat()">💬</button>
-<iframe id="chat-iframe" class="chat-popup" src="YOUR-SPACE-URL"></iframe>
-
-<script>
-function toggleChat() {
-  document.getElementById('chat-iframe').classList.toggle('active');
-}
-</script>
-```
-
-## Configuration Options
-
-### Change the LLM Model
-
-In `app.py`, change this line to use a different model:
-
-```python
-client = InferenceClient("mistralai/Mistral-7B-Instruct-v0.3")
-```
-
-Other good options:
-- `meta-llama/Llama-3.1-8B-Instruct` (Llama 3.1)
-- `HuggingFaceH4/zephyr-7b-beta` (Zephyr)
-- `google/flan-t5-xxl` (Smaller, faster)
-
-### Adjust Rate Limiting
-
-In `app.py`, modify:
-
-```python
-MAX_REQUESTS_PER_MINUTE = 15  # Change this number
-```
-
-### Change Chunk Size
-
-For longer FAQ answers, increase chunk size:
-
-```python
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,  # Increase to 800-1000 for longer answers
-    chunk_overlap=50
-)
-```
-
-## Troubleshooting
-
-### "Space is sleeping"
-Free Spaces sleep after inactivity. First user waits ~30 seconds for wake-up. Upgrade to persistent hardware if needed.
-
-### "Rate limit exceeded" errors
-You're hitting Hugging Face Inference API limits. Wait a few minutes or upgrade your HF account.
-
-### Slow responses
-This is normal on free CPU hardware. Consider:
-- Using a smaller model (flan-t5-large)
-- Upgrading to paid GPU Space
-- Reducing max_new_tokens in the response
-
-### Chatbot gives wrong answers
-- Check your FAQ content is clear and comprehensive
-- Adjust chunk_size to better match your content structure
-- Increase k value in similarity_search to retrieve more context
-- Add more examples to your FAQ
-
-## Cost Breakdown
-
-- **Hugging Face Space (CPU):** FREE
-- **Inference API calls:** FREE tier includes rate limits
-- **Bandwidth:** FREE (reasonable use)
-
-For high-traffic sites, consider:
-- HF Pro ($9/month) for higher rate limits
-- Paid Space hardware ($0.60/hour for GPU) for faster responses
-
-## Support
-
-Questions? Issues? 
-- Check Hugging Face Spaces documentation
-- Visit the Gradio documentation
-- Ask in HF community forums
+### PyTorch
+- `torch>=2.2.0` - Installed separately via custom script
+- `numpy<2.0` - Required for torch 2.2.x compatibility
 
 ## License
 
-MIT License - Feel free to modify and use for your projects!
+MIT
