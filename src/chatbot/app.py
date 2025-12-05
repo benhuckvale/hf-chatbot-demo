@@ -1,5 +1,6 @@
 """Main Gradio app for the RAG-powered chatbot."""
 
+import os
 import gradio as gr
 from huggingface_hub import InferenceClient
 
@@ -13,10 +14,19 @@ chunks = load_and_chunk_faq("faq.md")
 print(f"Created {len(chunks)} chunks from FAQ")
 vector_store = build_vector_store(chunks)
 
-# Initialize the LLM client (using Qwen via Inference API)
-# Using Qwen2.5-Coder-32B-Instruct which is available on HF Inference API
-client = InferenceClient("Qwen/Qwen2.5-Coder-32B-Instruct")
+# Initialize the LLM client (using Mistral via Inference API)
+# Mistral-7B-Instruct-v0.2 is routed through Featherless AI inference provider
+# Requires HF_API_TOKEN in HF Spaces, works in local dev + CI with HF token
+hf_token = (
+    os.getenv("HF_API_TOKEN")      # HF Spaces
+    or os.getenv("HF_HUB_TOKEN")   # Newer alias
+    or os.getenv("HF_TOKEN")       # Local: huggingface-cli login
+)
 
+client = InferenceClient(
+    "mistralai/Mistral-7B-Instruct-v0.2",
+    token=hf_token
+)
 
 def respond(message: str, history: list, request: gr.Request) -> str:
     """Main chatbot response function with RAG.
