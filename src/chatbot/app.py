@@ -8,63 +8,71 @@ from .rag import load_and_chunk_faq, build_vector_store, retrieve_context
 from .rate_limiter import check_rate_limit
 
 
-# Initialize models
-print("Initializing RAG system...")
-chunks = load_and_chunk_faq("faq.md")
-print(f"Created {len(chunks)} chunks from FAQ")
-vector_store = build_vector_store(chunks)
+def _get_hf_token() -> str:
+    """Get HF token from environment variables.
 
-# Initialize the LLM client (using Mistral via Inference API)
-# Mistral-7B-Instruct-v0.2 is routed through Featherless AI inference provider
-# Requires HF_API_TOKEN in HF Spaces, works in local dev + CI with HF token
-hf_token = (
-    os.getenv("HF_API_TOKEN")      # HF Spaces
-    or os.getenv("HF_HUB_TOKEN")   # Newer alias
-    or os.getenv("HF_TOKEN")       # Local: huggingface-cli login
-)
+    Tries multiple environment variable names for compatibility:
+    - HF_API_TOKEN: Standard for HF Spaces
+    - HF_HUB_TOKEN: Newer alias
+    - HF_TOKEN: Local huggingface-cli login
 
-client = InferenceClient(
-    "mistralai/Mistral-7B-Instruct-v0.2",
-    token=hf_token
-)
+    Returns:
+        HF token or None if not found
+    """
+    return (
+        os.getenv("HF_API_TOKEN")      # HF Spaces
+        or os.getenv("HF_HUB_TOKEN")   # Newer alias
+        or os.getenv("HF_TOKEN")       # Local: huggingface-cli login
+    )
 
-def respond(message: str, history: list, request: gr.Request) -> str:
-    """Main chatbot response function with RAG.
+
+def _create_respond_function(client, vector_store):
+    """Create the respond function with captured client and vector_store.
 
     Args:
-        message: User message
-        history: Chat history
-        request: Gradio request object for IP extraction
+        client: InferenceClient instance
+        vector_store: Vector store for RAG retrieval
 
-    Yields:
-        Streamed response text
+    Returns:
+        The respond function
     """
-    # Get client IP for rate limiting
-    client_ip = request.client.host if request else "unknown"
+    def respond(message: str, history: list, request: gr.Request) -> str:
+        """Main chatbot response function with RAG.
 
-    # Check rate limit
-    if not check_rate_limit(client_ip):
-        yield "You're sending too many messages. Please wait a minute and try again."
-        return
+        Args:
+            message: User message
+            history: Chat history
+            request: Gradio request object for IP extraction
 
-    if not message.strip():
-        yield "Please ask me a question!"
-        return
+        Yields:
+            Streamed response text
+        """
+        # Get client IP for rate limiting
+        client_ip = request.client.host if request else "unknown"
 
-    try:
-        # Retrieve relevant FAQ context
-        context = retrieve_context(vector_store, message, k=3)
+        # Check rate limit
+        if not check_rate_limit(client_ip):
+            yield "You're sending too many messages. Please wait a minute and try again."
+            return
 
-        # Build conversation history for context
-        conversation_context = ""
-        if history:
-            for exchange in history[-3:]:  # Last 3 exchanges
-                if isinstance(exchange, (list, tuple)) and len(exchange) >= 2:
-                    human, assistant = exchange[0], exchange[1]
-                    conversation_context += f"User: {human}\nAssistant: {assistant}\n\n"
+        if not message.strip():
+            yield "Please ask me a question!"
+            return
 
-        # Build the system prompt with FAQ context
-        system_prompt = f"""You are a helpful customer support assistant for an online store.
+        try:
+            # Retrieve relevant FAQ context
+            context = retrieve_context(vector_store, message, k=3)
+
+            # Build conversation history for context
+            conversation_context = ""
+            if history:
+                for exchange in history[-3:]:  # Last 3 exchanges
+                    if isinstance(exchange, (list, tuple)) and len(exchange) >= 2:
+                        human, assistant = exchange[0], exchange[1]
+                        conversation_context += f"User: {human}\nAssistant: {assistant}\n\n"
+
+            # Build the system prompt with FAQ context
+            system_prompt = f"""You are a helpful customer support assistant for an online store.
 Answer questions based on the FAQ content provided below.
 
 IMPORTANT GUIDELINES:
@@ -80,45 +88,74 @@ FAQ Content:
 Previous conversation:
 {conversation_context}"""
 
-        # Build messages for chat completion
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": message}
+            # Build messages for chat completion
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message}
+            ]
+
+            # Generate response using chat completion API
+            response = ""
+            for message_chunk in client.chat_completion(
+                messages=messages,
+                max_tokens=300,
+                temperature=0.7,
+                stream=True,
+            ):
+                if hasattr(message_chunk, 'choices') and len(message_chunk.choices) > 0:
+                    delta = message_chunk.choices[0].delta
+                    if hasattr(delta, 'content') and delta.content:
+                        response += delta.content
+                        yield response
+
+        except Exception as e:
+            yield f"Sorry, I encountered an error. Please try again. (Error: {str(e)})"
+
+    return respond
+
+
+def main():
+    """Initialize and return the Gradio chatbot interface."""
+    # Initialize RAG system
+    print("Initializing RAG system...")
+    chunks = load_and_chunk_faq("faq.md")
+    print(f"Created {len(chunks)} chunks from FAQ")
+    vector_store = build_vector_store(chunks)
+
+    # Initialize the LLM client (using Mistral via Inference API)
+    # Mistral-7B-Instruct-v0.2 is routed through Featherless AI inference provider
+    # Requires HF_API_TOKEN in HF Spaces, works in local dev + CI with HF token
+    print("Initializing LLM client...")
+    hf_token = _get_hf_token()
+    client = InferenceClient(
+        "mistralai/Mistral-7B-Instruct-v0.2",
+        token=hf_token
+    )
+
+    # Create the respond function with captured state
+    respond = _create_respond_function(client, vector_store)
+
+    # Create the Gradio ChatInterface
+    demo = gr.ChatInterface(
+        respond,
+        title="🛍️ Store Support Chat",
+        description="Ask me anything about shipping, returns, products, or policies!",
+        examples=[
+            "How long does shipping take?",
+            "What's your return policy?",
+            "Do you ship internationally?",
+            "Are your products eco-friendly?"
         ]
+    )
 
-        # Generate response using chat completion API
-        response = ""
-        for message_chunk in client.chat_completion(
-            messages=messages,
-            max_tokens=300,
-            temperature=0.7,
-            stream=True,
-        ):
-            if hasattr(message_chunk, 'choices') and len(message_chunk.choices) > 0:
-                delta = message_chunk.choices[0].delta
-                if hasattr(delta, 'content') and delta.content:
-                    response += delta.content
-                    yield response
+    # Apply theme to the demo
+    demo.theme = gr.themes.Soft()
 
-    except Exception as e:
-        yield f"Sorry, I encountered an error. Please try again. (Error: {str(e)})"
+    return demo
 
 
-# Create the Gradio ChatInterface
-demo = gr.ChatInterface(
-    respond,
-    title="🛍️ Store Support Chat",
-    description="Ask me anything about shipping, returns, products, or policies!",
-    examples=[
-        "How long does shipping take?",
-        "What's your return policy?",
-        "Do you ship internationally?",
-        "Are your products eco-friendly?"
-    ]
-)
-
-# Apply theme to the demo
-demo.theme = gr.themes.Soft()
+# Initialize demo at module level for pdm dev command and HF Spaces
+demo = main()
 
 
 if __name__ == "__main__":
