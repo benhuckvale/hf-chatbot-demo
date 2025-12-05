@@ -1,3 +1,13 @@
+---
+title: Store Support Chatbot
+emoji: 🛍️
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+app_file: app.py
+pinned: false
+---
+
 # Store Support Chatbot
 
 A RAG-powered customer support chatbot using Qwen2.5-Coder-32B-Instruct via Hugging Face Inference API.
