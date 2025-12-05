@@ -28,7 +28,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = []
+dev = [
+    "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
+]
 
 [tool.pdm]
 includes = ["src/"]
@@ -51,3 +54,7 @@ build = "python scripts/build.py"
 upload = "python scripts/upload.py"
 # Run dev server
 dev = {call = "chatbot.app:demo.launch", help = "Run dev server"}
+# Run tests
+test = "pytest tests/ -v"
+# Run tests with coverage
+test-cov = "pytest tests/ -v --cov=src"
