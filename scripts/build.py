@@ -33,7 +33,12 @@ def main():
         print(f"❌ Source directory not found: {src_dir}")
         return False
 
-    shutil.copytree(src_dir, dest_chatbot)
+    # Copy directory, excluding __pycache__ and .pyc files
+    shutil.copytree(
+        src_dir,
+        dest_chatbot,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
+    )
     print(f"✅ Copied chatbot/ package")
 
     # Create requirements.txt
